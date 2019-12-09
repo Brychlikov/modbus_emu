@@ -1,4 +1,5 @@
 #include <iostream>
+#include <sstream>
 #include <vector>
 #include <bitset>
 
@@ -19,7 +20,7 @@ ostream& operator << (ostream &out, const frame &f) {
 	return out;
 }
 
-/* class Slave; */
+class Slave;
 
 void string_xor(char * s1, char * s2, int len) {
 	for (int i = 0; i < len; ++i) {
@@ -39,10 +40,10 @@ void string_xor(string::iterator it1, string::iterator it2, int len) {
 }
 
 string compute_crc(string msg) {
-	/* string m = msg + "000"; */
-	/* string crc = "1011"; */
+//	string m = msg + "000";
+//	string crc = "1011";
 	string m = msg + "0000000000000000";
-	string crc = "11000000000000101";
+	string crc = "10000000000000101";
 	int len = m.length();
 
 	for (int i = 0; i < m.length() - 16; ++i) {
@@ -51,35 +52,132 @@ string compute_crc(string msg) {
 		string_xor(m.begin() + i, crc.begin(), 17);
 	}
 	/* cout << "final\n"; */
-	cout <<  m << endl;
+//	cout <<  m << endl;
 	return m.substr(len - 16, 16);
 }
 
-class Master {
-	/* vector<Slave> slaves; */
+bool crc_check(string msg, string crc_sum) {
+//    string crc = "1011";
+    string crc = "10000000000000101";
+	string m = msg + crc_sum;
+	int len = m.length();
 
+	for (int i = 0; i < m.length() - 16; ++i) {
+		if(m[i] == '0') continue;
+		string_xor(m.begin() + i, crc.begin(), 17);
+	}
+	/* cout << "final\n"; */
+//	cout <<  m << endl;
+	for(auto c: m.substr(len - 16, 16)) {
+		if(c != '0')
+			return false;
+	}
+	return true;
+}
+
+string string_to_binary(string s)  {
+    string result;
+    result.reserve(s.length() * 8);
+    for(int i=0; i < s.length(); i++) {
+        result.replace(i * 8, 8, bitset<8>(s[i]).to_string());
+    }
+    return result;
+}
+
+class Master {
+	vector<Slave> slaves;
+	
 	public: 
-	void send(string msg, uint8_t addr, ostream &out) {
+	frame makeFrame(string msg, uint8_t addr, uint8_t func) {
 		frame f;
 
 		f.addr = bitset<8>(addr).to_string();
-		f.func = bitset<8>(1).to_string();
-		f.data = string();
-		f.data.reserve(msg.length() * 8);
-		for(int i=0; i < msg.length(); i++) {
-			f.data.replace(i * 8, 8, bitset<8>(msg[i]).to_string());
-		}
+		f.func = bitset<8>(func).to_string();
+		f.data = msg;
 		f.crc = compute_crc(f.addr + f.func + f.data);
+		return f;
+	}
+	void send(string msg, uint8_t addr, uint8_t func, ostream &out) {
+		frame f = makeFrame(msg, addr, func);
 		out << f;
 	}
+
+};
+
+class Slave {
+    int16_t reg = 0;
+
+    frame errorFrame(frame const &f) {
+        frame result;
+        result.addr = "00000000";
+
+        string func = f.func;
+        func.at(0) = '1';  // mark response as an exception
+
+        result.func = func;
+        result.data = "";
+        result.crc = compute_crc(result.addr + result.func + result.data);
+        return result;
+    }
+
+public:
+    frame respond(frame const &f) {
+        // supported functions:
+        // 1 - add to register, responds with nothing
+        // 2 - read register
+
+        // check data for errors
+        frame result;
+        result.addr = "00000000";
+        bool correct = crc_check(f.addr + f.func + f.data, f.crc);
+        if(!correct) {
+            return errorFrame(f);
+        }
+
+        if(f.func == "00000001") {  // add
+            if(f.data.length() > 16) {
+                return errorFrame(f);
+            }
+
+            bitset<16> data_bit(f.data);
+            uint16_t to_add = data_bit.to_ulong();
+            reg += to_add;
+
+            result.func = f.func;
+            result.data = "";
+            result.crc = compute_crc(result.addr + result.func + result.data);
+            return result;
+        }
+
+        else if(f.func == "00000010") {  // read
+            result.func = f.func;
+            result.data = bitset<16>(reg).to_string();
+            result.crc = compute_crc(result.addr + result.func + result.data);
+            return result;
+        } else {
+            return errorFrame(f);
+        }
+
+    }
 
 };
 
 int main(int argc, char ** argv) {
 
 	Master m;
-	m.send("abc", 1, cout);
-	cout << compute_crc("11010011101110") << endl;
-
+	Slave s;
+	frame f = m.makeFrame("101", 1, 1);
+	frame res = s.respond(f);
+	cout << res << endl;
+    res = s.respond(f);
+    cout << res << endl;
+    res = s.respond(f);
+    cout << res << endl;
+    f = m.makeFrame("", 1, 2);
+    res = s.respond(f);
+    cout << res << endl;
+    f = m.makeFrame("100000000000000000000", 1, 1);
+    res = s.respond(f);
+    cout << res << endl;
 	return 0;
 }

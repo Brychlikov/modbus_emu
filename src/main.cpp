@@ -84,6 +84,20 @@ string string_to_binary(string s)  {
     return result;
 }
 
+frame frame_from_string(string s) {
+	frame result;
+	long len = s.size();
+	result.crc = s.substr(len - 16, 16);
+	result.addr = s.substr(0, 8);
+	result.func = s.substr(8, 8);
+	result.data = s.substr(16, len - 32);
+	return result;
+}
+
+string string_from_frame(frame &f) {
+	return f.addr + f.func + f.data + f.crc;
+}
+
 class Master {
 	vector<Slave> slaves;
 	
@@ -167,17 +181,23 @@ int main(int argc, char ** argv) {
 	Master m;
 	Slave s;
 	frame f = m.makeFrame("101", 1, 1);
-	frame res = s.respond(f);
-	cout << res << endl;
-    res = s.respond(f);
-    cout << res << endl;
-    res = s.respond(f);
-    cout << res << endl;
-    f = m.makeFrame("", 1, 2);
-    res = s.respond(f);
-    cout << res << endl;
-    f = m.makeFrame("100000000000000000000", 1, 1);
-    res = s.respond(f);
-    cout << res << endl;
+	cout << f << endl;
+	string str = string_from_frame(f);
+	cout << str << endl;
+	frame f2 = frame_from_string(str);
+	cout << f2;
+
+	/* frame res = s.respond(f); */
+	/* cout << res << endl; */
+    /* res = s.respond(f); */
+    /* cout << res << endl; */
+    /* res = s.respond(f); */
+    /* cout << res << endl; */
+    /* f = m.makeFrame("", 1, 2); */
+    /* res = s.respond(f); */
+    /* cout << res << endl; */
+    /* f = m.makeFrame("100000000000000000000", 1, 1); */
+    /* res = s.respond(f); */
+    /* cout << res << endl; */
 	return 0;
 }

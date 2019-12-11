@@ -2,6 +2,9 @@
 #include <sstream>
 #include <vector>
 #include <bitset>
+#include <cstdlib>
+#include <unistd.h> 
+#include <time.h>
 
 using namespace std;
 
@@ -19,6 +22,14 @@ ostream& operator << (ostream &out, const frame &f) {
 	out << f.crc;
 	return out;
 }
+
+union pipestruct {
+	int arr[2];
+	struct {
+		int out;
+		int in;
+	};
+};
 
 class Slave;
 
@@ -99,7 +110,7 @@ string string_from_frame(frame &f) {
 }
 
 class Master {
-	vector<Slave> slaves;
+	vector<pipestruct> slavepipes;
 	
 	public: 
 	frame makeFrame(string msg, uint8_t addr, uint8_t func) {
@@ -176,16 +187,63 @@ public:
 
 };
 
+string read_pipe(int p) {
+	// blocking call to read() Reads untill '\n'
+	string result;
+	char buf;
+	while(1) {
+		read(p, &buf, 1);
+		if(buf == '\n') {
+			break;
+		}
+		result.push_back(buf);
+	}
+	return result;
+}
+
+int child_func(int addr, pipestruct inpipe, pipestruct outpipe) {
+	cout << "Child func started" << endl;
+	close(inpipe.in);
+	close(outpipe.out);
+	Slave s;
+	while(1) {
+		cout << "Child wait begins" << endl;
+		string sframe = read_pipe(inpipe.out);
+		cout << "Child got message"<< endl;
+		frame f = frame_from_string(sframe);
+		frame res = s.respond(f);
+		string response = string_from_frame(res) + "\n";
+		write(outpipe.in, response.c_str(), response.size());
+	}
+	return 0;
+}
+
 int main(int argc, char ** argv) {
 
+
+	pipestruct readpipe, writepipe;
+	if(pipe(readpipe.arr) < 0 || pipe(writepipe.arr) < 0) {
+		printf("TO NIE DZIALA AAAAAAAA\n");
+		exit(1);
+	}
+
+
+	int pid;
+	if ((pid = fork()) > 0) {
+		// child process
+		cout << "Child process started" << endl;
+		child_func(0, writepipe, readpipe);
+		exit(0);
+	}
+
 	Master m;
-	Slave s;
 	frame f = m.makeFrame("101", 1, 1);
-	cout << f << endl;
-	string str = string_from_frame(f);
-	cout << str << endl;
-	frame f2 = frame_from_string(str);
-	cout << f2;
+	string f_str = string_from_frame(f) + "\n";
+	write(writepipe.in, f_str.c_str(), f_str.size());
+	string s_res = read_pipe(readpipe.out);
+	frame res = frame_from_string(s_res);
+	cout << "OTRZYMANO RAMKE Z POWROTEM:\n" << res << endl;
+
 
 	/* frame res = s.respond(f); */
 	/* cout << res << endl; */

@@ -4,6 +4,14 @@
 #include <time.h>
 
 #define MSGSIZE 16 
+union pipestruct {
+	int arr[2];
+	struct {
+		int in;
+		int out;
+	};
+};
+
 char msg1[] = "hello, world #1"; 
 char msg2[] = "hello, world #2"; 
 char msg3[] = "hello, world #3"; 
@@ -14,10 +22,14 @@ int main()
 { 
     char inbuf[MSGSIZE]; 
     int p[2][3], i; 
+    pipestruct pipes[3];
   
     for (int i = 0; i < 3; ++i) {
-	    if (pipe(p[i]) < 0) 
-		exit(1); 
+	    if (pipe(pipes[i].arr) < 0)  {
+		    printf("cos nie dziala\n");
+		    exit(1);
+	    }
+
     }
   
     /* continued */
@@ -36,7 +48,7 @@ int main()
         /* printf("% s\n", inbuf); */ 
 
 	    if((pid = fork()) > 0) {
-		    child_func(i, p[i]);
+		    child_func(i, pipes[i].arr);
 		    exit(0);
 	    }
     } 
@@ -46,14 +58,14 @@ int main()
     fd_set fd_copy;
     FD_ZERO(&fd);
     for (int i = 0; i < 3; ++i) {
-    	FD_SET(p[i][0], &fd);
+    	FD_SET(pipes[i].in, &fd);
     }
 
     int max_file_desc = 0;
 
     for (int i = 0; i < 3; ++i) {
-    	if (p[i][0] > max_file_desc)
-		max_file_desc = p[i][0];
+    	if (pipes[i].in > max_file_desc)
+		max_file_desc = pipes[i].in;
     }
 
     int res;
@@ -63,8 +75,8 @@ int main()
 
     printf("Proces matka tez zyje!\n");
     while(1) {
-	    printf("Wejscie do petli\n");
 	fd_copy = fd;
+	printf("przed selectem\n");
 	res = select(max_file_desc + 1, &fd_copy, NULL, NULL, &timeout);
 	if(res == 0) {
 		printf("Proces matka widząc śmierć wszystkich swoich dzieci też umiera ;(\n");
@@ -74,12 +86,11 @@ int main()
 
 	for (int i = 0; i < 3; ++i) {
 		char buf[32];
-		if(FD_ISSET(p[i][0], &fd_copy)) {
-			read(p[i][0], buf, 32);
+		if(FD_ISSET(pipes[i].in, &fd_copy)) {
+			read(pipes[i].in, buf, 32);
 			printf("Wiadomosc od procesu %d: %s\n", i, buf);
 		}
 	}
-	printf("Koniec petli\n");
     }
     printf("Proces matka umiera ;(\n");
     return 0; 

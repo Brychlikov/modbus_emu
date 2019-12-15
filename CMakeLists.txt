@@ -4,6 +4,6 @@ project(modbus)
 set(CMAKE_CXX_STANDARD 14)
 
 add_executable(modbus
-        src/main.cpp)
+        src/main.cpp )
 
 add_executable(pipetest src/pipetest.cpp)
